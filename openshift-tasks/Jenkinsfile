@@ -48,7 +48,7 @@ podTemplate(
 
       // TBD: The next two stages should run in parallel
       stage('Unit Tests & Code Analysis') {
-        parallel {
+        parallel (
           "Unit Tests" : {
             echo "Running Unit Tests"
             // TBD: Execute Unit Tests
@@ -59,7 +59,7 @@ podTemplate(
             // TBD: Execute Sonarqube Tests
             sh "${mvnCmd} sonar:sonar -Dsonar.host.url=http://sonarqube-gpte-hw-cicd.apps.na311.openshift.opentlc.com/ -Dsonar.projectName=${JOB_BASE_NAME} -Dsonar.projectVersion=${devTag} -DskipTests"
           }
-        }
+        )
       }
 
       // Publish the built war file to Nexus
