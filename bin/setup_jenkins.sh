@@ -17,6 +17,7 @@ oc new-app \
 jenkins-persistent
 --param MEMORY_LIMIT=2Gi \
 --param VOLUME_CAPACITY=4Gi \
+--param DISABLE_ADMINISTRATIVE_MONITORS=true \
 --namespace $GUID-jenkins
 
 # Create custom agent container image with skopeo
