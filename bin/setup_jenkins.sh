@@ -33,7 +33,7 @@ USER 1001
 # Create pipeline build config pointing to the ${REPO} with contextDir `openshift-tasks`
 oc new-build \
 $REPO \
---name openshift-tasks \
+--name tasks-pipeline \
 --strategy pipeline \
 --context-dir openshift-tasks \
 --env GUID=$GUID \
