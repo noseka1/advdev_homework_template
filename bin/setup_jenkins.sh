@@ -13,7 +13,11 @@ CLUSTER=$3
 echo "Setting up Jenkins in project ${GUID}-jenkins from Git Repo ${REPO} for Cluster ${CLUSTER}"
 
 # Set up Jenkins with sufficient resources
-# TBD
+oc new-app \
+jenkins-persistent
+--param MEMORY_LIMIT=2Gi \
+--param VOLUME_CAPACITY=4Gi \
+--namespace $GUID-jenkins
 
 # Create custom agent container image with skopeo
 # TBD
