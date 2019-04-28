@@ -77,6 +77,14 @@ podTemplate(
         echo "Building OpenShift container image tasks:${devTag}"
 
         // TBD: Build Image, tag Image
+        script {
+          openshift.withCluster() {
+            openshift.withProject("${GUID}-tasks-dev") {
+              openshift.selector("bc", "tasks").startBuild("--from-file=./target/openshift-tasks.war", "--wait=true")
+              openshift.tag("tasks:latest", "tasks:${devTag}")
+            }
+          }
+        }
       }
 
       // Deploy the built image to the Development Environment.
@@ -86,6 +94,29 @@ podTemplate(
         // TBD: Deploy to development Project
         //      Set Image, Set VERSION
         //      Make sure the application is running and ready before proceeding
+        script {
+          openshift.withCluster() {
+            openshift.withProject("${GUID}-tasks-dev") {
+              openshift.set("image", "dc/tasks", "tasks=docker-registry.default.svc:5000/${GUID}-tasks-dev/tasks:${devTag}")
+              openshift.set("env", "dc/tasks", "VERSION=\"${devTag} (tasks-dev)\"")
+
+              openshift.selector('configmap', 'tasks-config').delete("--ignore-not-found=true")
+              openshift.create("configmap", "tasks-config", "--from-file=application-users.properties=./configuration/application-users.properties", "--from-file=application-roles.properties=./configuration/application-roles.properties")
+
+              openshift.selector("dc", "tasks").rollout().latest()
+
+              def dc = openshift.selector("dc", "tasks").object()
+              def dc_version = dc.status.latestVersion
+              def rc = openshift.selector("rc", "tasks-${dc_version}").object()
+
+              echo "Waiting for ReplicationController tasks-${dc_version} to be ready"
+              while (rc.spec.replicas != rc.status.readyReplicas) {
+                sleep 5
+                rc = openshift.selector("rc", "tasks-${dc_version}").object()
+              }
+            }
+          }
+        }
       }
 
       // Copy Image to Nexus container registry
@@ -93,8 +124,16 @@ podTemplate(
         echo "Copy image to Nexus container registry"
 
         // TBD: Copy image to Nexus container registry
+        sh "skopeo copy --src-tls-verify=false --dest-tls-verify=false --src-creds openshift:\$(oc whoami -t) --dest-creds admin:redhat docker://docker-registry-default.apps.${CLUSTER}/${GUID}-tasks-dev/tasks:${devTag} docker://nexus-registry-gpte-hw-cicd.apps.na311.openshift.opentlc.com/tasks:${devTag}"
 
         // TBD: Tag the built image with the production tag.
+        script {
+          openshift.withCluster() {
+            openshift.withProject("${GUID}-tasks-dev") {
+              openshift.tag("${GUID}-tasks-dev/tasks:${devTag}", "${GUID}-tasks-dev/tasks:${prodTag}")
+            }
+          }
+        }
       }
 
       // Blue/Green Deployment into Production
@@ -107,11 +146,50 @@ podTemplate(
         //      Set Image, Set VERSION
         //      Deploy into the other application
         //      Make sure the application is running and ready before proceeding
+        script {
+          openshift.withCluster() {
+            openshift.withProject("${GUID}-tasks-prod") {
+              def route = openshift.selector("route", "tasks").object()
+              activeApp = "${route.spec.to.name}"
+              echo "Current app in use by route: ${activeApp}"
+              if (activeApp == "tasks-green") {
+                destApp = "tasks-blue"
+              }
+
+              openshift.set("image", "dc/${destApp}", "${destApp}=docker-registry.default.svc:5000/${GUID}-tasks-dev/tasks:${devTag}")
+              openshift.set("env", "dc/${destApp}", "VERSION=\"${prodTag} (${destApp})\"")
+
+              openshift.selector('configmap', "${destApp}-config").delete("--ignore-not-found=true")
+              openshift.create("configmap", "${destApp}-config", "--from-file=application-users.properties=./configuration/application-users.properties", "--from-file=application-roles.properties=./configuration/application-roles.properties")
+
+              openshift.selector("dc", "${destApp}").rollout().latest()
+
+              def dc = openshift.selector("dc", "${destApp}").object()
+              def dc_version = dc.status.latestVersion
+              def rc = openshift.selector("rc", "${destApp}-${dc_version}").object()
+
+              echo "Waiting for ReplicationController ${destApp}-${dc_version} to be ready"
+              while (rc.spec.replicas != rc.status.readyReplicas) {
+                sleep 5
+                rc = openshift.selector("rc", "${destApp}-${dc_version}").object()
+              }
+            }
+          }
+        }
       }
 
       stage('Switch over to new Version') {
         echo "Switching Production application to ${destApp}."
         // TBD: Execute switch
+        script {
+          openshift.withCluster() {
+            openshift.withProject("${GUID}-tasks-prod") {
+              def route = openshift.selector("route/tasks").object()
+              route.spec.to.name="${destApp}"
+              openshift.apply(route)
+            }
+          }
+        }
       }
     }
   }
