@@ -32,14 +32,30 @@ USER 1001
 --dockerfile -
 
 # Create pipeline build config pointing to the ${REPO} with contextDir `openshift-tasks`
-oc new-build \
-$REPO \
---name tasks-pipeline \
---strategy pipeline \
---context-dir openshift-tasks \
---env GUID=$GUID \
---env REPO=$REPO \
---env CLUSTER=$CLUSTER \
+echo "
+kind: BuildConfig
+apiVersion: v1
+metadata:
+  name: tasks-pipeline
+spec:
+  source:
+    type: Git
+    git:
+      uri: $REPO
+    contextDir: openshift-tasks
+  strategy:
+    type: JenkinsPipeline
+    jenkinsPipelineStrategy:
+      jenkinsfilePath: Jenkinsfile
+      env:
+      - name: GUID
+        value: $GUID
+      - name: REPO
+        value: $REPO
+      - name: CLUSTER
+        value: $CLUSTER
+" | oc create \
+--filename - \
 --namespace $GUID-jenkins
 
 # Make sure that Jenkins is fully up and running before proceeding!
